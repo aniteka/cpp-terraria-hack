@@ -72,6 +72,29 @@ DWORD getAdressFromSignature(std::vector<int> signature, DWORD start_adress = 0,
     return 0;
 }
 
+DWORD getPlayerBase()
+{
+    // Сигнатура(тобто як виклядає функція в байтах) функціїї get_LocalPlayer
+    std::vector<int> sig = { 0xA1, -1, -1, -1, -1, 0x8B, 0x15, -1, -1, -1, -1, 0x3B, 0x50, 0x04, 0x73, 0x05, 0x8B, 0x44, 0x90, 0x08 };
+    DWORD entry = getAdressFromSignature(sig, 0x20000000, 0x30000000);
+    if(entry == 0)
+        entry = getAdressFromSignature(sig, 0x10000000, 0x40000000);
+    if (entry == 0)
+        entry = getAdressFromSignature(sig);
+
+    // Це те, що повертає функція get_LocalPlayer(так було в дизассемблері)
+    DWORD eax = *(DWORD*)(*(DWORD*)(entry + 0x01));
+    DWORD edx = *(DWORD*)(*(DWORD*)(entry + 0x07));
+    return *(DWORD*)(eax + edx * 4 + 0x08);
+}
+
+#define GHOST_MEMORY_OFFSET 0x0000067F  // Відступ від PlayerBase до зміної ghost
+struct Player
+{
+    DWORD* pThis = NULL;    // Те, що повертає getPlayerBase;
+    bool bgost = 0;
+}Player;
+
 DWORD WINAPI Menue()
 {
     AllocConsole();                         // Відкриття вікна консолі
@@ -83,16 +106,21 @@ DWORD WINAPI Menue()
     while (1)
     {
         Sleep(100);
-        if (GetAsyncKeyState(VK_ESCAPE))
+        if (GetAsyncKeyState('0'))
             break;
         if (GetAsyncKeyState('1'))
         {
-            // Сигнатура(тобто як виклядає функція в байтах) функціїї get_LocalPlayer
-            std::vector<int> sig = { 0xA1, -1, -1, -1, -1, 0x8B, 0x15, -1, -1, -1, -1, 0x3B, 0x50, 0x04, 0x73, 0x05, 0x8B, 0x44, 0x90, 0x08 };
-            DWORD entry = getAdressFromSignature(sig, 0x20000000, 0x30000000);
-            if (entry == 0)
-                entry = getAdressFromSignature(sig);
-            std::cout << "Result: " << std::hex << entry << std::endl;
+            if (Player.pThis == NULL)
+                Player.pThis = (DWORD*)getPlayerBase();
+            byte& ghost_mode = *(byte*)((DWORD)Player.pThis + GHOST_MEMORY_OFFSET);
+            
+            if (Player.bgost == false)
+                ghost_mode = 1;
+            else 
+                ghost_mode = 0;
+            Player.bgost = ghost_mode;
+            std::cout << "Ghost mode - turn " << ((ghost_mode) ? "on" : "off") << std::endl;
+            Sleep(500);
         }
     }
 
